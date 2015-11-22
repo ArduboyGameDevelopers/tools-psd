@@ -6,7 +6,7 @@ Dir['utils/**/*.rb'].each { |source_file| require_relative source_file }
 TRANSPARENT_COLOR = 0xffffffff # white is transparent
 
 file_input = '/Users/weee/Creative Cloud Files/gamedev/Heros/Heros-Basic-16x16.psd'
-dir_out = '/Users/weee/Documents/Arduino/PixelSpaceOdysspy'
+dir_out = '/Users/weee/dev/projects/arduboy/games/PixelSpaceOdysspy'
 
 def process_layer(layer)
   ImageUtils::make_frame(layer.name, layer.image.to_png, TRANSPARENT_COLOR)
@@ -98,6 +98,9 @@ animation_inializers = []
 
   animation_inializers << "CreateAnimation(#{frames_name}, #{frames.length})"
 }
+
+source_h.println
+source_h.println "#define ANIMATIONS_COUNT #{animation_inializers.length}"
 
 source_h.println
 source_h.println 'extern const Animation animations[];'
