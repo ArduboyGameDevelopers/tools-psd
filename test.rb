@@ -2,7 +2,8 @@ require 'psd'
 require 'fileutils'
 
 require_relative 'image_utils'
-require_relative 'utils/animation'
+Dir['utils/**/*.rb'].each { |source_file| require_relative source_file }
+
 
 TRANSPARENT_COLOR = 0xffffffff # white is transparent
 
@@ -33,7 +34,6 @@ PSD.open(file) do |psd|
   }
 end
 
-
 dir_out = 'out'
 FileUtils.rmtree dir_out
 FileUtils.mkpath dir_out
@@ -41,22 +41,27 @@ FileUtils.mkpath dir_out
 file_h = "#{dir_out}/images.h"
 file_cpp = "#{dir_out}/images.cpp"
 
-source_h = ''
-source_cpp = ''
+source_h = SourceWriter.new
+source_cpp = SourceWriter.new
 
-source_h << "#ifndef IMAGES_H\n"
-source_h << "#define IMAGES_H\n\n"
+source_h.println '#ifndef IMAGES_H'
+source_h.println '#define IMAGES_H'
+source_h.println
+source_h.println "#include \"animation.h\""
 
-source_cpp << "include \"#{File.basename file_h}\""
+source_cpp.println "#include <avr/pgmspace.h>"
+source_cpp.println "#include \"#{File.basename file_h}\""
 
 animations.each { |animation|
 
   animation_name = animation.name.downcase
 
-  source_h << "// #{animation.name}\n"
-  (0..animation.frames.count-1).each { |index|
+  frames = animation.frames
+  names = []
 
-    frame = animation.frames[index]
+  (0..frames.count-1).each { |index|
+
+    frame = frames[index]
 
     data = []
     frame.data.each { |byte|
@@ -64,18 +69,38 @@ animations.each { |animation|
     }
 
     var_name = "#{animation_name}_#{index}"
-    source_h << "extern const unsigned char #{var_name}[];\n"
+    names << var_name
 
-    source_cpp << "\n\nPROGMEM const unsigned char #{var_name}[] = {\n"
-    source_cpp << "  #{frame.x}, #{frame.y}, #{frame.width}, #{frame.height},\n"
-    source_cpp << "  #{data.join ', '}\n"
-    source_cpp << "};"
+    source_cpp.println
+    source_cpp.println "PROGMEM static const unsigned char #{var_name}[] ="
+    source_cpp.block_open
+    source_cpp.println "#{frame.x}, #{frame.y}, #{frame.width}, #{frame.height},"
+    source_cpp.println "#{data.join ', '}"
+    source_cpp.block_close ';'
   }
+
+  frames_name = "#{animation_name}_frames"
+
+  source_cpp.println
+  source_cpp.println "static const FrameData #{frames_name}[] ="
+
+  source_cpp.block_open
+  names.each do |name|
+    source_cpp.println "#{name},"
+  end
+  source_cpp.block_close ';'
+
+  # const Animation animation_walk = CreateAnimation(walk_frames, sizeof(walk_frames) / sizeof(FrameData));
+
+  source_h.println
+  source_h.println "extern const Animation animation_#{animation_name};"
+
+  source_cpp.println
+  source_cpp.println "const Animation animation_#{animation_name} = CreateAnimation(#{frames_name}, #{frames.length});"
 }
 
-source_h << "\n"
-source_h << "#endif // IMAGES_H"
+source_h.println
+source_h.println '#endif // IMAGES_H'
 
-File.open(file_h, 'w') { |f| f.write source_h }
-File.open(file_cpp, 'w') { |f| f.write source_cpp }
-
+source_h.write_to_file file_h
+source_cpp.write_to_file file_cpp
