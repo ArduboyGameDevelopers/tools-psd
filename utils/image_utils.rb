@@ -1,6 +1,6 @@
 require 'chunky_png'
-require_relative 'utils/rect'
-require_relative 'utils/frame'
+require_relative 'rect'
+require_relative 'frame'
 
 module ImageUtils
 

@@ -1,13 +1,12 @@
 require 'psd'
 require 'fileutils'
 
-require_relative 'image_utils'
 Dir['utils/**/*.rb'].each { |source_file| require_relative source_file }
-
 
 TRANSPARENT_COLOR = 0xffffffff # white is transparent
 
-file = '/Users/weee/Documents/arduboy/walk.psd'
+file_input = '/Users/weee/Creative Cloud Files/gamedev/Heros/Heros-Basic-16x16.psd'
+dir_out = '/Users/weee/Documents/Arduino/PixelSpaceOdysspy'
 
 def process_layer(layer)
   ImageUtils::make_frame(layer.name, layer.image.to_png, TRANSPARENT_COLOR)
@@ -27,16 +26,12 @@ end
 
 animations = []
 
-PSD.open(file) do |psd|
+PSD.open(file_input) do |psd|
   children = psd.tree.children
   children.each { |child|
     animations.push process_group(child) if child.is_a? PSD::Node::Group
   }
 end
-
-dir_out = 'out'
-FileUtils.rmtree dir_out
-FileUtils.mkpath dir_out
 
 file_h = "#{dir_out}/images.h"
 file_cpp = "#{dir_out}/images.cpp"
@@ -52,12 +47,16 @@ source_h.println "#include \"animation.h\""
 source_cpp.println "#include <avr/pgmspace.h>"
 source_cpp.println "#include \"#{File.basename file_h}\""
 
-animations.each { |animation|
+animation_defines = []
+animation_inializers = []
 
-  animation_name = animation.name.downcase
+(0..animations.length-1).each { |animation_index|
+
+  animation = animations[animation_index]
+  animation_name = Utils.to_identifier animation.name
 
   frames = animation.frames
-  names = []
+  frames_names = []
 
   (0..frames.count-1).each { |index|
 
@@ -68,8 +67,8 @@ animations.each { |animation|
       data << "0x#{byte.to_s 16}"
     }
 
-    var_name = "#{animation_name}_#{index}"
-    names << var_name
+    var_name = Utils.to_identifier "#{animation_name}_#{index}"
+    frames_names << var_name
 
     source_cpp.println
     source_cpp.println "PROGMEM static const unsigned char #{var_name}[] ="
@@ -79,25 +78,35 @@ animations.each { |animation|
     source_cpp.block_close ';'
   }
 
-  frames_name = "#{animation_name}_frames"
+  frames_name = Utils.to_identifier "#{animation_name}_frames"
 
   source_cpp.println
   source_cpp.println "static const FrameData #{frames_name}[] ="
 
   source_cpp.block_open
-  names.each do |name|
+  frames_names.each do |name|
     source_cpp.println "#{name},"
   end
   source_cpp.block_close ';'
 
-  # const Animation animation_walk = CreateAnimation(walk_frames, sizeof(walk_frames) / sizeof(FrameData));
+  animation_define = "ANIMATION_#{animation_name.upcase}"
+  raise "Duplication animation: #{animation_name}" if animation_defines.include? animation_define
+  animation_defines << animation_define
 
   source_h.println
-  source_h.println "extern const Animation animation_#{animation_name};"
+  source_h.println "#define #{animation_define} #{animation_index}"
 
-  source_cpp.println
-  source_cpp.println "const Animation animation_#{animation_name} = CreateAnimation(#{frames_name}, #{frames.length});"
+  animation_inializers << "CreateAnimation(#{frames_name}, #{frames.length})"
 }
+
+source_h.println
+source_h.println 'extern const Animation animations[];'
+
+source_cpp.println
+source_cpp.println 'const Animation animations[] = '
+source_cpp.block_open
+animation_inializers.each { |a| source_cpp.println "#{a}," }
+source_cpp.block_close ';'
 
 source_h.println
 source_h.println '#endif // IMAGES_H'
